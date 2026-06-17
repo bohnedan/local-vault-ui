@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { retrieve } from '@/lib/embeddings'
+import { retrieve, indexStats, syncIndex } from '@/lib/embeddings'
 import { buildRagPrompt } from '@/lib/prompts'
 import { ollamaChat } from '@/lib/ollama'
+import { getConfig } from '@/lib/config'
 
 export async function POST(req: NextRequest) {
   try {
@@ -10,7 +11,31 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Missing question' }, { status: 400 })
     }
 
-    const chunks = await retrieve(body.question, 6)
+    // Keep the index fresh so newly added/edited notes are answerable without a
+    // manual "Sync Index". Incremental: only re-embeds changed notes (fast when
+    // nothing changed). If the embed model is down, fall back to the existing index.
+    let stats = indexStats()
+    if (stats.chunks > 0) {
+      try { await syncIndex() } catch { /* embed model unavailable — use existing index */ }
+      stats = indexStats()
+    }
+
+    // Empty index = nothing to search. This is the usual cause of "I don't know"
+    // about something that IS in the notes: the index was never built (often
+    // because the embedding model wasn't installed). Say so explicitly.
+    if (stats.chunks === 0) {
+      return NextResponse.json({
+        answer:
+          `I don't have any of your notes indexed on this machine yet, so I can't search them.\n\n` +
+          `**To fix it:** make sure the embedding model \`${getConfig().embedModel}\` is installed ` +
+          `(Settings → Embedding model → Pull), then click **Sync Index** in the top bar (or **Build index** ` +
+          `in Settings). Ask again once it finishes. The index is per-machine and isn't shared via git.`,
+        citations: [],
+        indexEmpty: true,
+      })
+    }
+
+    const chunks = await retrieve(body.question, 8)
     const messages = buildRagPrompt(body.question, chunks)
     const answer = await ollamaChat({ messages })
 

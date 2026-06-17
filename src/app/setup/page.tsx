@@ -66,6 +66,7 @@ export default function SetupPage() {
   const [pullMsg, setPullMsg] = useState('')
   const [pullPct, setPullPct] = useState<number | null>(null)
   const [building, setBuilding] = useState(false)
+  const [buildError, setBuildError] = useState<string | null>(null)
 
   const refresh = useCallback(async () => {
     const res = await fetch('/api/setup/status')
@@ -139,9 +140,15 @@ export default function SetupPage() {
 
   async function buildIndex() {
     setBuilding(true)
+    setBuildError(null)
     try {
-      await fetch('/api/index/rebuild', { method: 'POST' })
+      const res = await fetch('/api/index/rebuild', { method: 'POST' })
+      const data = await res.json() as { chunks?: number; error?: string }
+      if (!res.ok) throw new Error(data.error ?? 'Index build failed')
+      if (!data.chunks) throw new Error('Index built but empty — is the embedding model installed?')
       await refresh()
+    } catch (err) {
+      setBuildError(err instanceof Error ? err.message : 'Index build failed')
     } finally {
       setBuilding(false)
     }
@@ -258,8 +265,12 @@ export default function SetupPage() {
           {building ? <Loader2 size={14} className="animate-spin" /> : <Database size={14} />}
           {building ? 'Embedding notes…' : indexReady ? 'Rebuild index' : 'Build index'}
         </button>
-        {!vaultReady || !modelsReady ? (
-          <p className="text-xs mt-2" style={{ color: 'var(--text-subtle)' }}>Finish steps 1 and 2 first.</p>
+        {buildError ? (
+          <p className="text-xs mt-2 flex items-start gap-1.5" style={{ color: 'var(--danger)' }}>
+            <XCircle size={12} className="mt-0.5 flex-shrink-0" /> {buildError}
+          </p>
+        ) : !vaultReady || !modelsReady ? (
+          <p className="text-xs mt-2" style={{ color: 'var(--text-subtle)' }}>Finish steps 1 and 2 first (the embedding model must be installed).</p>
         ) : indexReady ? (
           <p className="text-xs mt-2 flex items-center gap-1.5" style={{ color: 'var(--success)' }}>
             <CheckCircle2 size={12} /> {s?.index.chunks} chunks indexed
