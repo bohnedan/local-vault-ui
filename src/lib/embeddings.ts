@@ -48,20 +48,36 @@ function getDb(): Database.Database {
 // chars (~500 tokens) is also a good retrieval granularity. The resilient embed
 // below further splits if a model's window is even smaller.
 const MAX_CHUNK_CHARS = 2000
+// Carry the tail of each chunk into the next so a fact split across a boundary
+// stays retrievable in at least one chunk.
+const CHUNK_OVERLAP_CHARS = 200
 
-// Split text into pieces no longer than maxLen, preferring line boundaries; a
-// single over-long line is hard-split.
-function splitText(text: string, maxLen: number): string[] {
+// Last `n` chars of a string, snapped forward to a line boundary when possible.
+function tailOverlap(s: string, n: number): string {
+  if (s.length <= n) return s
+  const slice = s.slice(s.length - n)
+  const nl = slice.indexOf('\n')
+  return nl === -1 ? slice : slice.slice(nl + 1)
+}
+
+// Split text into pieces no longer than maxLen, preferring line boundaries, with
+// `overlap` characters shared between consecutive pieces. A single over-long line
+// is hard-split into overlapping windows.
+function splitText(text: string, maxLen: number, overlap = CHUNK_OVERLAP_CHARS): string[] {
   if (text.length <= maxLen) return [text]
   const out: string[] = []
   let cur = ''
   for (const line of text.split('\n')) {
     if (line.length > maxLen) {
       if (cur) { out.push(cur); cur = '' }
-      for (let i = 0; i < line.length; i += maxLen) out.push(line.slice(i, i + maxLen))
+      const step = Math.max(1, maxLen - overlap)
+      for (let i = 0; i < line.length; i += step) out.push(line.slice(i, i + maxLen))
       continue
     }
-    if (cur && cur.length + line.length + 1 > maxLen) { out.push(cur); cur = '' }
+    if (cur && cur.length + line.length + 1 > maxLen) {
+      out.push(cur)
+      cur = tailOverlap(cur, overlap) // seed the next chunk with the overlap
+    }
     cur = cur ? `${cur}\n${line}` : line
   }
   if (cur) out.push(cur)
