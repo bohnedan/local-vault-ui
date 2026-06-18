@@ -116,6 +116,15 @@ never grows large). A **Clear** button wipes it on demand. **Include conversatio
 whole transcript through the normal ingest pipeline (`/api/chat/to-vault` → `buildIngestPrompt`) and
 shows the drafted note as a diff to approve — same path as a dropped document.
 
+## Bulk import (building a vault from scratch)
+
+No vault yet? Sidebar → **Import**. Point at a **folder** of exports — Markdown, txt, HTML
+(Notion/Evernote), Evernote `.enex` (expands to one note per entry), `.csv`, `.json`, PDF, and `.docx`
+(Google Docs/Word, via `mammoth`). Files are structured into AI-first notes **6 at a time**
+and shown as diffs to **batch-approve** before anything is written (`src/lib/extract.ts`,
+`/api/import/batch`). Typical cold-start: **Init** an empty vault → **Import** your exports →
+**Interlink** to connect them → **Vault Health → Auto-fix**. All local.
+
 ## Drag-drop ingest (with notes)
 
 Drop a `.md` / `.txt` / `.pdf` / image anywhere in the app. Before the model drafts a note you get a
