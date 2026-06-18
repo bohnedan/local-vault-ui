@@ -57,14 +57,13 @@ export function AutoCaretake() {
         const d = (await r.json()) as {
           sync: { notes: number; chunks: number }
           health: { scanned: number; issues: unknown[] } | null
+          fixesApplied?: number
+          proposalsQueued?: number
         }
         if (mode === 'full') {
-          const issues = d.health?.issues.length ?? 0
-          showToast(
-            `Nightly caretake done — ${d.sync.chunks} chunks indexed` +
-              (d.health ? `, ${issues} health issue${issues === 1 ? '' : 's'}` : ''),
-            'success'
-          )
+          const parts = [`${d.fixesApplied ?? 0} fix(es) applied`]
+          if (d.proposalsQueued) parts.push(`${d.proposalsQueued} proposal(s) to review`)
+          showToast(`Nightly caretake done — ${parts.join(', ')}`, 'success')
         } else if (d.sync.notes > 0) {
           // Only speak up when something actually changed.
           showToast(`Index refreshed — ${d.sync.notes} note(s) updated`, 'info')

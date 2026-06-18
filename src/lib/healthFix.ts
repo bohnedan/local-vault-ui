@@ -1,5 +1,7 @@
+import fs from 'fs'
 import path from 'path'
-import type { HealthIssue } from '@/lib/health'
+import { scanVaultHealth, type HealthIssue } from '@/lib/health'
+import { resolveVaultPath } from '@/lib/vault'
 
 // Deterministic, fully-local repair of STRUCTURAL health issues. No model — so it
 // always produces a correct, predictable fix (unlike a small chat model, which
@@ -76,4 +78,45 @@ export function deterministicFix(
 
   const parts = [frontmatter, preamble, body].filter(Boolean)
   return parts.join('\n\n').trimEnd() + '\n'
+}
+
+const DETERMINISTIC: HealthIssue['kind'][] = ['missing-frontmatter', 'missing-preamble']
+
+export type HealthFixChange = { path: string; action: 'update'; content: string }
+
+// Scan the vault and build deterministic structural fixes (up to `limit` notes).
+// Shared by the manual "Auto-fix structure" route and the nightly caretake run.
+export function buildHealthFixChanges(limit = Number.POSITIVE_INFINITY): {
+  changes: HealthFixChange[]
+  fixableTotal: number
+  remaining: number
+  otherIssues: number
+} {
+  const report = scanVaultHealth()
+
+  const byNote = new Map<string, Set<HealthIssue['kind']>>()
+  for (const issue of report.issues) {
+    if (!DETERMINISTIC.includes(issue.kind)) continue
+    const set = byNote.get(issue.path) ?? new Set<HealthIssue['kind']>()
+    set.add(issue.kind)
+    byNote.set(issue.path, set)
+  }
+
+  const allFiles = Array.from(byNote.keys())
+  const batch = allFiles.slice(0, limit)
+
+  const changes: HealthFixChange[] = []
+  for (const notePath of batch) {
+    let content: string
+    try { content = fs.readFileSync(resolveVaultPath(notePath), 'utf-8') } catch { continue }
+    const fixed = deterministicFix(notePath, content, byNote.get(notePath)!)
+    if (fixed && fixed !== content) changes.push({ path: notePath, action: 'update', content: fixed })
+  }
+
+  return {
+    changes,
+    fixableTotal: allFiles.length,
+    remaining: Math.max(0, allFiles.length - batch.length),
+    otherIssues: report.issues.filter(i => !DETERMINISTIC.includes(i.kind)).length,
+  }
 }

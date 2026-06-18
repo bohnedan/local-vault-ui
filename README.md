@@ -141,9 +141,19 @@ idempotent and never overwrites an existing file (`src/lib/vaultInit.ts`).
 all local:
 
 - **Index sync** every *N* hours (default 6) — incremental re-embed of changed notes.
-- **Nightly full caretake** at a chosen hour (default 03:00) — sync + a deterministic health scan
-  (missing frontmatter/preamble, broken wikilinks, empty notes), with a summary appended to
-  `Logs/YYYY-MM-DD.md`. If the app was closed past the hour, it catches up at next launch.
+- **Nightly full caretake** at a chosen hour (default 03:00). Two tiers — *auto-apply the safe steps,
+  queue the risky ones for review*:
+  - **Auto-applied (safe, deterministic):** index sync + a health scan + structural health fixes
+    (add missing frontmatter / "For future Claude" preamble, body preserved verbatim).
+  - **Queued for review (model-driven):** a curation proposal over the notes that changed in the last
+    24h (link related notes, file strays via `move`, merge duplicates, synthesize a `Knowledge/` note
+    when warranted). It is **never written unattended** — it lands in the **Review** queue.
+  - A summary is appended to `Logs/YYYY-MM-DD.md`. If the app was closed past the hour, it catches up
+    at next launch.
+
+**Review queue** (sidebar → **Review**, with a count badge). Proposals the overnight caretaker prepared
+but did not write. Open each, approve/reject the diffs (`/api/pending`, `data/pending/*.json`,
+gitignored). This keeps the propose→review→approve safety model even for unattended runs.
 
 It's a foreground scheduler, not a headless daemon — it only runs while the app is open. For
 **always-on** scheduling, point an OS cron/Task Scheduler at the same endpoint:

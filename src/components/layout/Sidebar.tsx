@@ -12,6 +12,7 @@ import {
   MessageSquare,
   Sparkles,
   Settings,
+  Moon,
 } from 'lucide-react'
 import { cn } from '@/lib/cn'
 
@@ -19,6 +20,7 @@ const NAV_ITEMS = [
   { href: '/', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/chat', label: 'Chat', icon: MessageSquare },
   { href: '/curate', label: 'Curate', icon: Sparkles },
+  { href: '/review', label: 'Review', icon: Moon },
   { href: '/commands', label: 'Commands', icon: Terminal },
   { href: '/explorer', label: 'Explorer', icon: FolderOpen },
   { href: '/search', label: 'Search', icon: Search },
@@ -28,6 +30,7 @@ const NAV_ITEMS = [
 export function Sidebar() {
   const pathname = usePathname()
   const [vaultLabel, setVaultLabel] = useState('—')
+  const [pending, setPending] = useState(0)
 
   useEffect(() => {
     fetch('/api/setup/status')
@@ -36,6 +39,10 @@ export function Sidebar() {
         const p = d.vault?.path
         if (p) setVaultLabel(p.split('/').filter(Boolean).pop() ?? p)
       })
+      .catch(() => {})
+    fetch('/api/pending')
+      .then(r => r.json())
+      .then((d: { count?: number }) => setPending(d.count ?? 0))
       .catch(() => {})
   }, [pathname])
 
@@ -94,7 +101,15 @@ export function Sidebar() {
                 size={18}
                 style={{ color: active ? 'var(--primary)' : 'inherit' }}
               />
-              {label}
+              <span className="flex-1">{label}</span>
+              {href === '/review' && pending > 0 && (
+                <span
+                  className="text-xs font-semibold px-1.5 py-0.5 rounded-full min-w-[20px] text-center"
+                  style={{ background: 'var(--primary)', color: 'white' }}
+                >
+                  {pending}
+                </span>
+              )}
             </Link>
           )
         })}
