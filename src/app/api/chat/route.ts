@@ -3,6 +3,7 @@ import { retrieveNotes, indexStats, syncIndex } from '@/lib/embeddings'
 import { buildRagPrompt } from '@/lib/prompts'
 import { ollamaChat } from '@/lib/ollama'
 import { getConfig } from '@/lib/config'
+import { appendMessages } from '@/lib/chatHistory'
 
 export async function POST(req: NextRequest) {
   try {
@@ -42,6 +43,12 @@ export async function POST(req: NextRequest) {
 
     const citations = Array.from(
       new Map(chunks.map(c => [c.notePath, { path: c.notePath, heading: c.heading }])).values()
+    )
+
+    // Persist the exchange to the lightweight (7-day) history.
+    appendMessages(
+      { role: 'user', content: body.question },
+      { role: 'assistant', content: answer, citations },
     )
 
     return NextResponse.json({ answer, citations })

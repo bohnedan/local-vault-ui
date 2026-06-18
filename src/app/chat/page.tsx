@@ -1,11 +1,23 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Send, Loader2, MessageSquare, FileText } from 'lucide-react'
+import { Send, Loader2, MessageSquare, FileText, Trash2, BookmarkPlus } from 'lucide-react'
+import { ProposalReview, type ProposalResponse } from '@/components/shared/ProposalReview'
 
 type Citation = { path: string; heading: string }
 type Message = { role: 'user' | 'assistant'; content: string; citations?: Citation[] }
+
+function buildTranscript(messages: Message[]): string {
+  const date = new Date().toISOString().slice(0, 10)
+  const lines = [`# Conversation — ${date}`, '']
+  for (const m of messages) {
+    lines.push(m.role === 'user' ? `**You:** ${m.content}` : `**Assistant:** ${m.content}`)
+    if (m.citations?.length) lines.push(`_Sources: ${m.citations.map(c => `[[${c.path.replace(/\.md$/, '')}]]`).join(', ')}_`)
+    lines.push('')
+  }
+  return lines.join('\n')
+}
 
 export default function ChatPage() {
   const router = useRouter()
@@ -13,6 +25,19 @@ export default function ChatPage() {
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [capturing, setCapturing] = useState(false)
+  const [proposal, setProposal] = useState<ProposalResponse | null>(null)
+
+  // Restore the recent (last-7-days) thread on load.
+  useEffect(() => {
+    void (async () => {
+      try {
+        const res = await fetch('/api/chat/history', { cache: 'no-store' })
+        const data = await res.json() as { messages: Message[] }
+        if (data.messages?.length) setMessages(data.messages)
+      } catch { /* no history yet */ }
+    })()
+  }, [])
 
   async function send() {
     const question = input.trim()
@@ -41,14 +66,73 @@ export default function ChatPage() {
     }
   }
 
+  async function clearHistory() {
+    await fetch('/api/chat/history', { method: 'DELETE' })
+    setMessages([]); setProposal(null); setError(null)
+  }
+
+  // Route the whole conversation through the normal ingest pipeline → review.
+  async function includeInVault() {
+    if (capturing || messages.length === 0) return
+    setCapturing(true); setError(null); setProposal(null)
+    try {
+      const res = await fetch('/api/chat/to-vault', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          transcript: buildTranscript(messages),
+          notes: 'Saved chat conversation about the vault — capture the key questions, answers, decisions, and facts worth keeping.',
+        }),
+      })
+      const data = await res.json() as ProposalResponse
+      if (!res.ok) throw new Error(data.error ?? 'Could not capture conversation')
+      setProposal(data)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not capture conversation')
+    } finally {
+      setCapturing(false)
+    }
+  }
+
   return (
     <div className="flex flex-col h-full" style={{ height: 'calc(100vh - 56px - 48px)' }}>
-      <div className="mb-4 flex-shrink-0">
-        <h1 className="text-xl font-bold gradient-text">Chat</h1>
-        <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>
-          Ask questions about your vault — answered locally via Ollama with citations
-        </p>
+      <div className="mb-4 flex-shrink-0 flex items-start justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-bold gradient-text">Chat</h1>
+          <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>
+            Ask questions about your vault — answered locally via Ollama with citations. History is kept for 7 days.
+          </p>
+        </div>
+        {messages.length > 0 && (
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <button
+              onClick={() => void includeInVault()}
+              disabled={capturing}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium transition-all hover:scale-[1.02] disabled:opacity-50"
+              style={{ background: 'linear-gradient(135deg, var(--primary), var(--accent))', color: 'white' }}
+              title="Turn this conversation into a vault note via the ingest pipeline"
+            >
+              {capturing ? <Loader2 size={13} className="animate-spin" /> : <BookmarkPlus size={13} />}
+              Include conversation in vault
+            </button>
+            <button
+              onClick={() => void clearHistory()}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs transition-all hover:scale-[1.02]"
+              style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', color: 'var(--text-muted)' }}
+              title="Clear chat history"
+            >
+              <Trash2 size={13} /> Clear
+            </button>
+          </div>
+        )}
       </div>
+
+      {proposal && (
+        <div className="mb-4 flex-shrink-0 rounded-2xl p-4" style={{ border: '1px solid var(--border)', background: 'var(--bg-surface)' }}>
+          <p className="text-sm font-medium mb-3" style={{ color: 'var(--text)' }}>Save this conversation as a note</p>
+          <ProposalReview result={proposal} onApplied={() => setProposal(null)} onDiscard={() => setProposal(null)} />
+        </div>
+      )}
 
       <div
         className="flex-1 min-h-0 flex flex-col rounded-2xl overflow-hidden"

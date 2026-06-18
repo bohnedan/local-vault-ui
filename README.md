@@ -108,6 +108,14 @@ behind a reviewable diff:
   preserved verbatim. Fully local, no model variance. Broken wikilinks and empty
   notes are left for a human (`src/lib/healthFix.ts`).
 
+## Chat history & capturing conversations
+
+Chat keeps a **lightweight, local history** — the recent thread is restored on load and **auto-clears
+after 7 days** (`src/lib/chatHistory.ts`, stored in gitignored `data/chat-history.json`, capped so it
+never grows large). A **Clear** button wipes it on demand. **Include conversation in vault** runs the
+whole transcript through the normal ingest pipeline (`/api/chat/to-vault` → `buildIngestPrompt`) and
+shows the drafted note as a diff to approve — same path as a dropped document.
+
 ## Drag-drop ingest (with notes)
 
 Drop a `.md` / `.txt` / `.pdf` / image anywhere in the app. Before the model drafts a note you get a
