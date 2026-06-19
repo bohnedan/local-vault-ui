@@ -5,6 +5,7 @@ import { retrieve } from '@/lib/embeddings'
 import { buildIngestPrompt } from '@/lib/prompts'
 import { ollamaChat, ollamaVisionChat } from '@/lib/ollama'
 import { getVaultPath } from '@/lib/vault'
+import { normalizeChanges } from '@/lib/healthFix'
 
 export const dynamic = 'force-dynamic'
 
@@ -58,6 +59,7 @@ function buildProposal(raw: string): NextResponse | IngestResult {
   if (!Array.isArray(result.changes) || result.changes.length === 0) {
     return NextResponse.json({ error: 'Model proposed no note', raw }, { status: 502 })
   }
+  result.changes = normalizeChanges(result.changes)
   return result
 }
 

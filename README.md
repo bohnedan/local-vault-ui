@@ -108,6 +108,18 @@ behind a reviewable diff:
   preserved verbatim. Fully local, no model variance. Broken wikilinks and empty
   notes are left for a human (`src/lib/healthFix.ts`).
 
+## No self-inflicting health issues
+
+Every note a model produces (chat Edit, Curate, Commands, ingest, import, capture) is **normalized**
+before you even see the diff (`src/lib/healthFix.ts` → `normalizeChanges` → `ensureStructure`): missing
+frontmatter and the "For future Claude" preamble are added deterministically, body preserved. So editing
+the vault can't create the very structural issues the health scan then flags.
+
+**Health auto-fix also resolves broken links** now (not only Interlink): the **Auto-fix structure**
+button adds frontmatter/preamble **and** creates stub notes so dangling `[[links]]` resolve, all in one
+reviewed batch. (The unattended nightly run still only auto-applies the content-preserving structural
+fixes — stub creation is manual-only.)
+
 ## Chat: Ask or Edit
 
 The chat input has an **Ask / Edit vault** toggle:

@@ -2,9 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import { retrieve } from '@/lib/embeddings'
 import { buildCurationPrompt } from '@/lib/prompts'
 import { ollamaChat } from '@/lib/ollama'
+import { normalizeChanges } from '@/lib/healthFix'
 
 type CurationResult = {
-  changes: Array<{ path: string; action: 'create' | 'update'; content: string }>
+  changes: Array<{ path: string; action: 'create' | 'update' | 'move' | 'delete'; content?: string; from?: string; to?: string }>
   log_entry: string
   summary: string
 }
@@ -37,6 +38,7 @@ export async function POST(req: NextRequest) {
       )
     }
 
+    result.changes = normalizeChanges(result.changes)
     return NextResponse.json(result)
   } catch (err) {
     return NextResponse.json(

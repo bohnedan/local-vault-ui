@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { retrieve } from '@/lib/embeddings'
 import { buildIngestPrompt } from '@/lib/prompts'
 import { ollamaChat } from '@/lib/ollama'
+import { normalizeChanges } from '@/lib/healthFix'
 
 // "Include conversation in the vault" — runs the current chat transcript through
 // the SAME ingest pipeline a dropped document uses (retrieve context → draft a
@@ -28,6 +29,7 @@ export async function POST(req: NextRequest) {
     if (!Array.isArray(result.changes) || result.changes.length === 0) {
       return NextResponse.json({ error: 'Model proposed no note', raw }, { status: 502 })
     }
+    result.changes = normalizeChanges(result.changes as Array<{ path: string; action: string; content?: string }>)
     return NextResponse.json(result)
   } catch (err) {
     return NextResponse.json(

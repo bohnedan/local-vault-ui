@@ -151,29 +151,41 @@ export function buildInterlinkChanges(opts: { limit?: number; createStubs?: bool
   }
 
   // PASS 2 — create stub notes for broken-link targets (so dangling links resolve).
-  let stubsProposed = 0
-  if (createStubs) {
-    const knownKeys = new Set(notes.map(n => n.title.toLowerCase()))
-    const knownRel = new Set(notes.map(n => n.path.replace(/\.md$/, '').toLowerCase()))
-    const brokenTargets = new Map<string, string>() // key -> display (as first written)
-    for (const note of notes) {
-      if (note.title.toLowerCase() === '_claude') continue
-      const scan = note.content.replace(/```[\s\S]*?```/g, '').replace(/`[^`]*`/g, '')
-      for (const m of Array.from(scan.matchAll(/\[\[([^\]|#]+)(?:[#|][^\]]*)?\]\]/g))) {
-        const target = m[1].trim()
-        const key = target.toLowerCase()
-        const base = key.split('/').pop() ?? key
-        if (knownKeys.has(base) || knownRel.has(key)) continue // resolves already
-        if (!isLinkable(target.split('/').pop() ?? target)) continue
-        if (!brokenTargets.has(base)) brokenTargets.set(base, target.split('/').pop() ?? target)
-      }
-    }
-    for (const display of Array.from(brokenTargets.values())) {
-      const folder = inferStubFolder(display)
-      changes.push({ path: `${folder}/${display}.md`, action: 'create', content: stubNote(display, today) })
-      stubsProposed++
+  const stubs = createStubs ? buildBrokenLinkStubs(today) : []
+  changes.push(...stubs)
+
+  return { changes, linksAdded, stubsProposed: stubs.length, scanned: notes.length }
+}
+
+// Stub notes for every genuinely-broken [[link]] target in the vault, so dangling
+// links resolve. Shared by Interlink and by Health auto-fix (so broken links can be
+// fixed from either place). Skips links inside code, the _CLAUDE.md doc, and
+// non-distinctive targets.
+export function buildBrokenLinkStubs(today = new Date().toISOString().slice(0, 10)): InterlinkChange[] {
+  const notes = listAllNotes().map(n => {
+    try { return { path: n.path, title: path.basename(n.path).replace(/\.md$/, ''), content: fs.readFileSync(resolveVaultPath(n.path), 'utf-8') } }
+    catch { return null }
+  }).filter((n): n is Note => !!n)
+
+  const knownKeys = new Set(notes.map(n => n.title.toLowerCase()))
+  const knownRel = new Set(notes.map(n => n.path.replace(/\.md$/, '').toLowerCase()))
+  const brokenTargets = new Map<string, string>() // key -> display
+  for (const note of notes) {
+    if (note.title.toLowerCase() === '_claude') continue
+    const scan = note.content.replace(/```[\s\S]*?```/g, '').replace(/`[^`]*`/g, '')
+    for (const m of Array.from(scan.matchAll(/\[\[([^\]|#]+)(?:[#|][^\]]*)?\]\]/g))) {
+      const target = m[1].trim()
+      const key = target.toLowerCase()
+      const base = key.split('/').pop() ?? key
+      if (knownKeys.has(base) || knownRel.has(key)) continue // resolves already
+      if (!isLinkable(target.split('/').pop() ?? target)) continue
+      if (!brokenTargets.has(base)) brokenTargets.set(base, target.split('/').pop() ?? target)
     }
   }
 
-  return { changes, linksAdded, stubsProposed, scanned: notes.length }
+  return Array.from(brokenTargets.values()).map(display => ({
+    path: `${inferStubFolder(display)}/${display}.md`,
+    action: 'create' as const,
+    content: stubNote(display, today),
+  }))
 }

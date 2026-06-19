@@ -4,6 +4,7 @@ import { extractDocs, type ExtractedDoc } from '@/lib/extract'
 import { retrieve } from '@/lib/embeddings'
 import { buildIngestPrompt } from '@/lib/prompts'
 import { ollamaChat } from '@/lib/ollama'
+import { normalizeChanges } from '@/lib/healthFix'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
@@ -68,7 +69,7 @@ export async function POST(req: NextRequest) {
     }
 
     return NextResponse.json({
-      changes,
+      changes: normalizeChanges(changes),
       log_entry: `Bulk import — drafted ${changes.length} note(s) from ${units.length} document(s).`,
       summary: `Imported ${changes.length} note(s) from this batch` +
         (failed.length ? `; ${failed.length} file(s) couldn't be read` : '') +

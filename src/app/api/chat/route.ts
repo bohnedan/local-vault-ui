@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { retrieve, retrieveNotes, indexStats, syncIndex } from '@/lib/embeddings'
 import { buildRagPrompt, buildCurationPrompt } from '@/lib/prompts'
+import { normalizeChanges } from '@/lib/healthFix'
 import { ollamaChat } from '@/lib/ollama'
 import { getConfig } from '@/lib/config'
 import { appendToSession, getSession } from '@/lib/chatHistory'
@@ -65,6 +66,9 @@ export async function POST(req: NextRequest) {
       if (!Array.isArray(result.changes) || result.changes.length === 0) {
         return NextResponse.json({ error: 'The model proposed no changes — try rephrasing the edit.', raw }, { status: 502 })
       }
+      // Conform the proposed notes to the vault structure so the edit can't spawn
+      // new frontmatter/preamble health issues.
+      result.changes = normalizeChanges(result.changes as Array<{ path: string; action: string; content?: string; from?: string; to?: string }>)
       const sid = appendToSession(body.sessionId, [
         { role: 'user', content: body.question },
         { role: 'assistant', content: `Proposed ${result.changes.length} change(s): ${result.summary ?? ''}`.trim() },

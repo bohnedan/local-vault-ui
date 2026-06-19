@@ -167,10 +167,10 @@ export function HealthReport() {
       {total > 0 && (
         <p className="text-xs" style={{ color: 'var(--text-subtle)' }}>
           Auto-fix adds missing frontmatter and a &ldquo;For future Claude&rdquo; preamble (summarised
-          from each note&rsquo;s own first paragraph) — deterministic and fully local, your content is
-          preserved. Up to 25 notes at a time, each shown as a diff to approve (the Apply button stays
-          pinned at the bottom). For broken links, use the <strong>Interlink</strong> command — it
-          creates stub notes so dangling links resolve and grows your graph.
+          from each note&rsquo;s own first paragraph) <strong>and creates stub notes so broken
+          <code>[[links]]</code> resolve</strong> — deterministic, fully local, your content preserved.
+          Up to 25 notes at a time, each shown as a diff to approve (Apply stays pinned at the bottom).
+          Empty notes still need a human. (To also <em>add</em> new links across notes, use Interlink.)
         </p>
       )}
 

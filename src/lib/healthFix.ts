@@ -2,6 +2,7 @@ import fs from 'fs'
 import path from 'path'
 import { scanVaultHealth, type HealthIssue } from '@/lib/health'
 import { resolveVaultPath } from '@/lib/vault'
+import { buildBrokenLinkStubs } from '@/lib/interlink'
 
 // Deterministic, fully-local repair of STRUCTURAL health issues. No model — so it
 // always produces a correct, predictable fix (unlike a small chat model, which
@@ -80,17 +81,43 @@ export function deterministicFix(
   return parts.join('\n\n').trimEnd() + '\n'
 }
 
+// Guarantee a note has the AI-first structure (frontmatter + "For future Claude"
+// preamble), preserving the body. Used to NORMALIZE model-generated notes before
+// they're proposed, so chat/curate/ingest edits can't introduce fresh health
+// issues — the self-inflicting loop where editing the vault created new problems.
+export function ensureStructure(notePath: string, content: string, today?: string): string {
+  const kinds = new Set<HealthIssue['kind']>(['missing-frontmatter', 'missing-preamble'])
+  const fixed = deterministicFix(notePath, content, kinds, today)
+  return fixed ?? content
+}
+
+// Normalize the create/update notes in a change-proposal (move/delete untouched).
+export function normalizeChanges<T extends { path: string; action: string; content?: string; from?: string; to?: string }>(changes: T[]): T[] {
+  return changes.map(c =>
+    (c.action === 'create' || c.action === 'update') && typeof c.content === 'string'
+      ? { ...c, content: ensureStructure(c.to ?? c.path, c.content) }
+      : c
+  )
+}
+
 const DETERMINISTIC: HealthIssue['kind'][] = ['missing-frontmatter', 'missing-preamble']
 
-export type HealthFixChange = { path: string; action: 'update'; content: string }
+export type HealthFixChange = { path: string; action: 'update' | 'create'; content: string }
 
 // Scan the vault and build deterministic structural fixes (up to `limit` notes).
 // Shared by the manual "Auto-fix structure" route and the nightly caretake run.
-export function buildHealthFixChanges(limit = Number.POSITIVE_INFINITY): {
+// When `includeBrokenLinks` is set (manual fix only — NOT the unattended nightly
+// run), also append stub notes that resolve dangling [[links]], so broken-link
+// health issues are fixable from the Health panel too, not only via Interlink.
+export function buildHealthFixChanges(
+  limit = Number.POSITIVE_INFINITY,
+  opts: { includeBrokenLinks?: boolean } = {},
+): {
   changes: HealthFixChange[]
   fixableTotal: number
   remaining: number
   otherIssues: number
+  stubs: number
 } {
   const report = scanVaultHealth()
 
@@ -113,10 +140,19 @@ export function buildHealthFixChanges(limit = Number.POSITIVE_INFINITY): {
     if (fixed && fixed !== content) changes.push({ path: notePath, action: 'update', content: fixed })
   }
 
+  // Broken-link stubs (manual fix only) — so dangling [[links]] resolve.
+  let stubs = 0
+  if (opts.includeBrokenLinks) {
+    const stubChanges = buildBrokenLinkStubs()
+    changes.push(...stubChanges)
+    stubs = stubChanges.length
+  }
+
   return {
     changes,
     fixableTotal: allFiles.length,
     remaining: Math.max(0, allFiles.length - batch.length),
     otherIssues: report.issues.filter(i => !DETERMINISTIC.includes(i.kind)).length,
+    stubs,
   }
 }
