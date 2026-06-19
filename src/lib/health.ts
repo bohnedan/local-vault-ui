@@ -26,10 +26,13 @@ function stripCode(s: string): string {
   return s.replace(/```[\s\S]*?```/g, '').replace(/`[^`]*`/g, '')
 }
 
-// Notes that are documentation/scaffolding, not content — their example links and
-// structure shouldn't be health-flagged.
+// Notes that aren't "content" — scaffolding docs and append-only operational logs.
+// Their structure/example-links shouldn't be health-flagged or auto-fixed (logs
+// have no frontmatter by design; flagging them caused a fix→reflag loop).
 function isMetaNote(notePath: string): boolean {
-  return path.basename(notePath).toLowerCase() === '_claude.md'
+  if (path.basename(notePath).toLowerCase() === '_claude.md') return true
+  // Any note under a Logs/ or Dev Logs/ directory (operational logs).
+  return notePath.split('/').some(seg => /^(dev )?logs$/i.test(seg))
 }
 
 export function scanVaultHealth(): HealthReport {
