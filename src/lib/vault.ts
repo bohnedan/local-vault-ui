@@ -16,6 +16,17 @@ export const SKIP_DIRS = new Set([
   '.trash',
 ])
 
+// Notes that aren't "content" — scaffolding docs and append-only operational logs.
+// Their structure and example/ephemeral [[links]] shouldn't be health-flagged or
+// auto-fixed (logs have no frontmatter by design, and reference throwaway things;
+// flagging them caused a fix→reflag loop). Shared by the health scan and the
+// link-graph builder so both treat the exact same notes as non-content.
+export function isMetaNote(notePath: string): boolean {
+  if (path.basename(notePath).toLowerCase() === '_claude.md') return true
+  // Any note under a Logs/ or Dev Logs/ directory (operational logs).
+  return notePath.split('/').some(seg => /^(dev )?logs$/i.test(seg))
+}
+
 export type FileNode = {
   name: string
   path: string

@@ -1,6 +1,6 @@
 import fs from 'fs'
-import path from 'path'
-import { listAllNotes, resolveVaultPath } from '@/lib/vault'
+import { listAllNotes, resolveVaultPath, isMetaNote } from '@/lib/vault'
+import { brokenLinkTargets, buildKnownSet } from '@/lib/interlink'
 
 // Deterministic, fully-local vault structure scan. No model, no network.
 // Surfaces drift from the vault's AI-first conventions so the user can fix it.
@@ -20,31 +20,11 @@ export type HealthReport = {
 const FRONTMATTER_RE = /^---\r?\n[\s\S]*?\r?\n---/
 const PREAMBLE_RE = /for future claude/i
 
-// Strip fenced code blocks and inline code so example/illustrative [[links]] inside
-// them aren't mistaken for real, broken wikilinks.
-function stripCode(s: string): string {
-  return s.replace(/```[\s\S]*?```/g, '').replace(/`[^`]*`/g, '')
-}
-
-// Notes that aren't "content" — scaffolding docs and append-only operational logs.
-// Their structure/example-links shouldn't be health-flagged or auto-fixed (logs
-// have no frontmatter by design; flagging them caused a fix→reflag loop).
-function isMetaNote(notePath: string): boolean {
-  if (path.basename(notePath).toLowerCase() === '_claude.md') return true
-  // Any note under a Logs/ or Dev Logs/ directory (operational logs).
-  return notePath.split('/').some(seg => /^(dev )?logs$/i.test(seg))
-}
-
 export function scanVaultHealth(): HealthReport {
   const notes = listAllNotes()
 
-  // Build a set of all note basenames + relative paths (without .md) for wikilink resolution.
-  const known = new Set<string>()
-  for (const n of notes) {
-    const rel = n.path.replace(/\.md$/, '')
-    known.add(rel.toLowerCase())
-    known.add(path.basename(rel).toLowerCase())
-  }
+  // Lowercased set of every note's rel-path + basename, for wikilink resolution.
+  const known = buildKnownSet(notes)
 
   const issues: HealthIssue[] = []
 
@@ -72,18 +52,11 @@ export function scanVaultHealth(): HealthReport {
       issues.push({ path: note.path, kind: 'missing-preamble', detail: 'No "For future Claude" preamble' })
     }
 
-    // Broken wikilinks: [[Target]] or [[Target|alias]] / [[Target#heading]].
-    // Scan code-stripped content so example links in fences aren't false positives.
-    const links = Array.from(stripCode(content).matchAll(/\[\[([^\]|#]+)(?:[#|][^\]]*)?\]\]/g))
-    const seen = new Set<string>()
-    for (const m of links) {
-      const target = m[1].trim()
-      const key = target.toLowerCase()
-      if (seen.has(key)) continue
-      seen.add(key)
-      if (!known.has(key) && !known.has(path.basename(key))) {
-        issues.push({ path: note.path, kind: 'broken-wikilink', detail: `[[${target}]] has no matching note` })
-      }
+    // Broken wikilinks — only the ones Auto-fix can actually resolve (see
+    // brokenLinkTargets). Flagging unfixable targets (dates, generic words) would
+    // produce a count the user can never clear by clicking "fix".
+    for (const target of brokenLinkTargets(content, known)) {
+      issues.push({ path: note.path, kind: 'broken-wikilink', detail: `[[${target}]] has no matching note` })
     }
   }
 

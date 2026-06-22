@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Loader2, Check, X, FilePlus, FileEdit, ArrowRightLeft, Trash2 } from 'lucide-react'
 import { DiffView } from '@/components/curate/DiffView'
 import { useToast } from '@/components/shared/Toast'
@@ -36,6 +36,14 @@ export function ProposalReview({ result, onApplied, onDiscard }: Props) {
   const [changes, setChanges] = useState<Change[]>(result.changes)
   const [approved, setApproved] = useState<Set<string>>(new Set(result.changes.map(c => c.path)))
   const [applying, setApplying] = useState(false)
+  const rootRef = useRef<HTMLDivElement>(null)
+
+  // Proposals render below the command cockpit, inside a scrollable panel — easy to
+  // miss. Pull the review into view (and the panel header to its top) as soon as it
+  // mounts, so the user sees the diffs and the Apply bar without hunting for scroll.
+  useEffect(() => {
+    rootRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [])
 
   // Fetch the current content of each target so the diff shows real before/after.
   // Only create/update are normalized by what's on disk; move/delete keep their
@@ -109,7 +117,18 @@ export function ProposalReview({ result, onApplied, onDiscard }: Props) {
   }
 
   return (
-    <div className="flex flex-col gap-3">
+    <div ref={rootRef} className="flex flex-col gap-3 scroll-mt-4">
+      <div
+        className="flex items-center gap-2 pt-2 mt-1 border-t"
+        style={{ borderColor: 'var(--border-subtle)' }}
+      >
+        <span className="text-xs font-semibold uppercase tracking-wide" style={{ color: 'var(--text-muted)' }}>
+          Proposed changes — review &amp; apply below
+        </span>
+        <span className="text-xs px-2 py-0.5 rounded-full" style={{ background: 'var(--bg-elevated)', color: 'var(--text-subtle)' }}>
+          {changes.length}
+        </span>
+      </div>
       <div className="card p-4">
         <p className="text-sm" style={{ color: 'var(--text)' }}>{result.summary}</p>
       </div>

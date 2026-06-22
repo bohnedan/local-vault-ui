@@ -1,6 +1,6 @@
 import fs from 'fs'
 import path from 'path'
-import { listAllNotes, resolveVaultPath } from '@/lib/vault'
+import { listAllNotes, resolveVaultPath, isMetaNote } from '@/lib/vault'
 
 // Graph builder. Two deterministic, fully-local passes that grow the vault's
 // interconnection (the Obsidian "mesh"):
@@ -27,7 +27,7 @@ function escapeRe(s: string): string {
 }
 
 // A title is a good auto-link candidate if it's distinctive enough.
-function isLinkable(title: string): boolean {
+export function isLinkable(title: string): boolean {
   const t = title.trim()
   if (t.length < 4) return false
   if (STOPLIST.has(t.toLowerCase())) return false
@@ -157,29 +157,62 @@ export function buildInterlinkChanges(opts: { limit?: number; createStubs?: bool
   return { changes, linksAdded, stubsProposed: stubs.length, scanned: notes.length }
 }
 
+// THE canonical "broken link" definition, shared by the health scan (which counts
+// them) and the stub builder (which resolves them). Returns the distinct broken-link
+// target basenames in `content` — links pointing at no existing note. `known` is a
+// lowercased set containing every note's relative path AND its basename (without
+// .md). A target is only counted when it's STUBBABLE (passes isLinkable): dates,
+// stoplist words and too-short targets are skipped, because they're either
+// intentional (daily-note links Obsidian creates on click) or too generic to stub
+// safely. Keeping detector and fixer on this one predicate is what stops the
+// fix→reflag loop — what Health flags is exactly what Auto-fix can resolve.
+export function brokenLinkTargets(content: string, known: Set<string>): string[] {
+  const scan = content.replace(/```[\s\S]*?```/g, '').replace(/`[^`]*`/g, '')
+  const out: string[] = []
+  const seen = new Set<string>()
+  for (const m of Array.from(scan.matchAll(/\[\[([^\]|#]+)(?:[#|][^\]]*)?\]\]/g))) {
+    const target = m[1].trim()
+    const key = target.toLowerCase()
+    const base = key.split('/').pop() ?? key
+    if (known.has(key) || known.has(base)) continue // resolves already
+    if (!isLinkable(base)) continue                 // not a safely-stubbable target
+    if (seen.has(base)) continue
+    seen.add(base)
+    out.push(target.split('/').pop() ?? target) // display (original case, basename)
+  }
+  return out
+}
+
+// Lowercased set of every note's relative path AND basename (without .md), used to
+// decide whether a [[link]] resolves. Built once and shared by the link passes.
+export function buildKnownSet(notes: Array<{ path: string }>): Set<string> {
+  const known = new Set<string>()
+  for (const n of notes) {
+    const rel = n.path.replace(/\.md$/, '')
+    known.add(rel.toLowerCase())
+    known.add(path.basename(rel).toLowerCase())
+  }
+  return known
+}
+
 // Stub notes for every genuinely-broken [[link]] target in the vault, so dangling
 // links resolve. Shared by Interlink and by Health auto-fix (so broken links can be
-// fixed from either place). Skips links inside code, the _CLAUDE.md doc, and
-// non-distinctive targets.
+// fixed from either place). Uses brokenLinkTargets and skips meta/log notes — the
+// SAME exclusions the health scan applies — so the fixer never invents stubs for
+// throwaway links that live only in operational logs.
 export function buildBrokenLinkStubs(today = new Date().toISOString().slice(0, 10)): InterlinkChange[] {
   const notes = listAllNotes().map(n => {
     try { return { path: n.path, title: path.basename(n.path).replace(/\.md$/, ''), content: fs.readFileSync(resolveVaultPath(n.path), 'utf-8') } }
     catch { return null }
   }).filter((n): n is Note => !!n)
 
-  const knownKeys = new Set(notes.map(n => n.title.toLowerCase()))
-  const knownRel = new Set(notes.map(n => n.path.replace(/\.md$/, '').toLowerCase()))
-  const brokenTargets = new Map<string, string>() // key -> display
+  const known = buildKnownSet(notes)
+  const brokenTargets = new Map<string, string>() // lowercased basename -> display
   for (const note of notes) {
-    if (note.title.toLowerCase() === '_claude') continue
-    const scan = note.content.replace(/```[\s\S]*?```/g, '').replace(/`[^`]*`/g, '')
-    for (const m of Array.from(scan.matchAll(/\[\[([^\]|#]+)(?:[#|][^\]]*)?\]\]/g))) {
-      const target = m[1].trim()
-      const key = target.toLowerCase()
-      const base = key.split('/').pop() ?? key
-      if (knownKeys.has(base) || knownRel.has(key)) continue // resolves already
-      if (!isLinkable(target.split('/').pop() ?? target)) continue
-      if (!brokenTargets.has(base)) brokenTargets.set(base, target.split('/').pop() ?? target)
+    if (isMetaNote(note.path)) continue
+    for (const display of brokenLinkTargets(note.content, known)) {
+      const key = display.toLowerCase()
+      if (!brokenTargets.has(key)) brokenTargets.set(key, display)
     }
   }
 
