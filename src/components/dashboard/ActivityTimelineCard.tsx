@@ -40,11 +40,25 @@ export function ActivityTimelineCard() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetch('/api/timeline?limit=40')
-      .then(r => r.json())
-      .then((d: { operations?: Operation[] }) => setOps(d.operations ?? []))
-      .catch(() => {})
-      .finally(() => setLoading(false))
+    let active = true
+    const load = () => {
+      fetch('/api/timeline?limit=40', { cache: 'no-store' })
+        .then(r => r.json())
+        .then((d: { operations?: Operation[] }) => { if (active) setOps(d.operations ?? []) })
+        .catch(() => {})
+        .finally(() => { if (active) setLoading(false) })
+    }
+    load()
+    // Refresh whenever a change is applied anywhere in the app, and when the tab
+    // regains focus (so the timeline never looks stale).
+    const onUpdate = () => load()
+    window.addEventListener('vault:updated', onUpdate)
+    window.addEventListener('focus', onUpdate)
+    return () => {
+      active = false
+      window.removeEventListener('vault:updated', onUpdate)
+      window.removeEventListener('focus', onUpdate)
+    }
   }, [])
 
   // Group consecutive ops under a day heading.

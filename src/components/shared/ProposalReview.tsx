@@ -108,7 +108,9 @@ export function ProposalReview({ result, onApplied, onDiscard }: Props) {
       })
       const data = await res.json() as { written?: string[]; error?: string }
       if (!res.ok) throw new Error(data.error ?? 'Apply failed')
-      showToast(`Updated ${data.written?.length ?? 0} file(s)`, 'success')
+      showToast(`Saved ${data.written?.length ?? 0} file(s) to the vault`, 'success')
+      // Let live views (e.g. the dashboard Activity Timeline) refresh immediately.
+      if (typeof window !== 'undefined') window.dispatchEvent(new Event('vault:updated'))
       onApplied?.()
     } catch (err) {
       showToast(err instanceof Error ? err.message : 'Apply failed', 'error')

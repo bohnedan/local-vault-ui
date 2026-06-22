@@ -14,11 +14,15 @@ function git(cwd: string, args: string[]) {
 // Pull updates into the vault, robust to the most common reasons a bare `git pull`
 // fails from a UI button (no model, just git):
 //   - no remote / no upstream → clear message instead of an opaque 500
+//   - DIRTY working tree       → the vault accumulates uncommitted edits (the app
+//                               writes notes; Obsidian rewrites .obsidian/workspace
+//                               constantly). A pull then aborts with "local changes
+//                               would be overwritten". So we COMMIT local changes
+//                               first — never discarding anything — then pull.
 //   - divergent branches      → Git ≥2.27 refuses without a strategy; we try a
-//                               fast-forward first, then fall back to a merge
-//                               (--no-rebase), which never discards local work
+//                               fast-forward first, then fall back to a merge.
 //   - merge conflicts         → abort cleanly and tell the user to resolve in git,
-//                               so the vault is never left half-merged
+//                               so the vault is never left half-merged.
 export async function POST() {
   const cwd = getVaultPath()
   if (!cwd) {
@@ -40,6 +44,29 @@ export async function POST() {
     return NextResponse.json(
       { error: 'No upstream/remote configured for this branch — set one with `git branch --set-upstream-to`.' },
       { status: 400 }
+    )
+  }
+
+  // 0) Commit any local changes first so a dirty tree can't block the merge. This is
+  //    the usual cause of the "git 500": the vault has uncommitted edits and the
+  //    incoming commits touch the same files. Committing preserves everything; the
+  //    merge below reconciles. Inline identity so it works even if git user.name/
+  //    email aren't configured for this repo.
+  try {
+    const { stdout } = await git(cwd, ['status', '--porcelain'])
+    if (stdout.trim()) {
+      const stamp = new Date().toISOString().slice(0, 16).replace('T', ' ')
+      await git(cwd, ['add', '-A']) // stage tracked + untracked so nothing is left behind
+      await git(cwd, [
+        '-c', 'user.name=vault-ui', '-c', 'user.email=vault-ui@local',
+        'commit', '--no-verify', '-m', `vault-ui: local vault changes before sync (${stamp})`,
+      ])
+    }
+  } catch (commitErr) {
+    const e = commitErr as GitError
+    return NextResponse.json(
+      { error: `Couldn't commit local vault changes before syncing: ${(e.stderr || e.message || 'commit failed').trim()}` },
+      { status: 500 }
     )
   }
 
