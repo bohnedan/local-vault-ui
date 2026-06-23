@@ -3,6 +3,7 @@ import { retrieve } from '@/lib/embeddings'
 import { buildCurationPrompt } from '@/lib/prompts'
 import { ollamaChat } from '@/lib/ollama'
 import { normalizeChanges } from '@/lib/healthFix'
+import { reconcileUpdates } from '@/lib/merge'
 import { parseModelJson } from '@/lib/modelJson'
 
 type CurationResult = {
@@ -37,7 +38,7 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    result.changes = normalizeChanges(result.changes)
+    result.changes = normalizeChanges(await reconcileUpdates(result.changes))
     return NextResponse.json({ ...result, origin: 'add' })
   } catch (err) {
     return NextResponse.json(

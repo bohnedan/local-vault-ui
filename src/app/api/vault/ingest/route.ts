@@ -7,6 +7,7 @@ import { ollamaChat, ollamaVisionChat } from '@/lib/ollama'
 import { getVaultPath } from '@/lib/vault'
 import { getConfig } from '@/lib/config'
 import { normalizeChanges } from '@/lib/healthFix'
+import { reconcileUpdates } from '@/lib/merge'
 import { parseModelJson } from '@/lib/modelJson'
 
 export const dynamic = 'force-dynamic'
@@ -85,7 +86,7 @@ async function ingestSource(
 
     const result = parseModelJson<IngestResult>(raw)
     if (result && Array.isArray(result.changes) && result.changes.length > 0) {
-      result.changes = normalizeChanges(result.changes)
+      result.changes = normalizeChanges(await reconcileUpdates(result.changes))
       return { ...result, origin: 'drop' }
     }
     // else: shrink the source and try again

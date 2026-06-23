@@ -3,6 +3,7 @@ import { retrieve } from '@/lib/embeddings'
 import { buildIngestPrompt } from '@/lib/prompts'
 import { ollamaChat } from '@/lib/ollama'
 import { normalizeChanges } from '@/lib/healthFix'
+import { reconcileUpdates } from '@/lib/merge'
 import { parseModelJson } from '@/lib/modelJson'
 
 // "Include conversation in the vault" — runs the current chat transcript through
@@ -30,7 +31,7 @@ export async function POST(req: NextRequest) {
     if (!Array.isArray(result.changes) || result.changes.length === 0) {
       return NextResponse.json({ error: 'Model proposed no note', raw }, { status: 502 })
     }
-    result.changes = normalizeChanges(result.changes as Array<{ path: string; action: string; content?: string }>)
+    result.changes = normalizeChanges(await reconcileUpdates(result.changes as Array<{ path: string; action: string; content?: string }>))
     return NextResponse.json({ ...result, origin: 'chat' })
   } catch (err) {
     return NextResponse.json(

@@ -4,6 +4,7 @@ import { buildCommandPrompt } from '@/lib/prompts'
 import { ollamaChat } from '@/lib/ollama'
 import { getLocalCommand } from '@/lib/commands'
 import { normalizeChanges } from '@/lib/healthFix'
+import { reconcileUpdates } from '@/lib/merge'
 import { parseModelJson } from '@/lib/modelJson'
 
 type CommandResult = {
@@ -43,7 +44,7 @@ export async function POST(req: NextRequest) {
             (c.action === 'move' && c.from && c.to) ||
             (c.action === 'delete' && c.path)))
 
-    result.changes = normalizeChanges(result.changes)
+    result.changes = normalizeChanges(await reconcileUpdates(result.changes))
     return NextResponse.json({ ...result, origin: body.id })
   } catch (err) {
     return NextResponse.json(

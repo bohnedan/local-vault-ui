@@ -70,7 +70,9 @@ ALL of them (often more than one). Route by content, e.g.:
 - a task → a "- [ ]" item on the relevant board or daily note
 - a reusable fact/idea → Knowledge/<Topic>.md
 Capturing one input across several linked notes is expected and encouraged. For each file:
-- If updating, return the FULL new file content (not a diff).
+- If updating, return the FULL new file content (not a diff). PRESERVE the existing content that still
+  holds and integrate your changes into it — add new facts, correct only what's contradicted, and never
+  drop unrelated sections. You are extending existing knowledge, not replacing it.
 - Follow the AI-first rules: rich frontmatter, a "For future Claude" preamble, [[wikilinks]] to related
   people/projects, recency markers and confidence levels where relevant.
 - Use today's date where needed: ${new Date().toISOString().slice(0, 10)}.
