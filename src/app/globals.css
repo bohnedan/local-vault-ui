@@ -191,7 +191,10 @@ body {
   border: 1px solid var(--border-subtle);
   border-radius: 16px;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.02), 0 8px 24px rgba(0, 0, 0, 0.04);
-  transition: all 200ms ease;
+  /* Only animate visual properties — NEVER layout (width/height/position). With
+     `transition: all`, content/grid reflow while typing got animated, making the
+     cards wiggle up and down. */
+  transition: box-shadow 200ms ease, border-color 200ms ease, transform 200ms ease;
 }
 .card:hover { border-color: var(--border); transform: translateY(-2px); }
 .card-interactive:hover { transform: translateY(-3px); box-shadow: 0 16px 40px var(--card-glow); }
