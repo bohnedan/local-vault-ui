@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { Sparkles, Loader2 } from 'lucide-react'
 import { ProposalReview, type ProposalResponse } from '@/components/shared/ProposalReview'
 
@@ -11,17 +11,36 @@ type Props = {
   inputPlaceholder: string
   submitLabel?: string
   minHeight?: number
+  // When set, the textarea is user-resizable (drag the bottom edge) and the chosen
+  // height is remembered in this browser under this localStorage key.
+  storageKey?: string
   // Caller supplies how to request a proposal from the given input text.
   request: (input: string) => Promise<Response>
 }
 
 // Input box -> request a proposal -> review/approve/apply (via ProposalReview).
 // Used by the Curate page and by every local command.
-export function ProposalFlow({ inputLabel, inputPlaceholder, submitLabel = 'Propose updates', minHeight = 140, request }: Props) {
+export function ProposalFlow({ inputLabel, inputPlaceholder, submitLabel = 'Propose updates', minHeight = 140, storageKey, request }: Props) {
   const [text, setText] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<ProposalResponse | null>(null)
+  const taRef = useRef<HTMLTextAreaElement>(null)
+
+  // Restore the user's preferred box height, and persist any drag-resize. The
+  // browser writes an inline style.height when the user drags the resize handle;
+  // we mirror that to localStorage and reapply it on the next visit.
+  useEffect(() => {
+    const el = taRef.current
+    if (!el || !storageKey) return
+    const saved = localStorage.getItem(storageKey)
+    if (saved) el.style.height = saved
+    const ro = new ResizeObserver(() => {
+      if (el.style.height) localStorage.setItem(storageKey, el.style.height)
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [storageKey])
 
   async function propose() {
     if (!text.trim() || loading) return
@@ -45,10 +64,11 @@ export function ProposalFlow({ inputLabel, inputPlaceholder, submitLabel = 'Prop
       <div className="card p-4 flex flex-col gap-3">
         <label className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>{inputLabel}</label>
         <textarea
+          ref={taRef}
           value={text}
           onChange={e => setText(e.target.value)}
           placeholder={inputPlaceholder}
-          className="resize-none rounded-lg p-3 text-sm outline-none"
+          className={`${storageKey ? 'resize-y' : 'resize-none'} rounded-lg p-3 text-sm outline-none`}
           style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', color: 'var(--text)', minHeight: `${minHeight}px`, fontFamily: 'inherit' }}
         />
         <div className="flex justify-end">

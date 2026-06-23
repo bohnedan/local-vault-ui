@@ -22,6 +22,7 @@ export default function AddPage() {
       <ProposalFlow
         inputLabel="What do you want to add?"
         inputPlaceholder="e.g. Kickoff with Example Company — agreed on the audit scope. Max Mustermann (their CTO) owns the tooling. Next milestone in two weeks."
+        storageKey="add-input-height"
         request={(input) =>
           fetch('/api/curate', {
             method: 'POST',
