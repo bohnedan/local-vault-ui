@@ -24,8 +24,8 @@ export async function ollamaChat(opts: {
   // Context window. Ollama defaults to a tiny 2048 tokens, which silently TRUNCATES
   // big prompts (e.g. a dropped PDF + _CLAUDE.md + retrieved notes) — dropping the
   // "return JSON" instructions and leaving no room to finish the reply, so JSON
-  // comes back incomplete/unparseable. We default generously and let callers raise
-  // it for large-document work.
+  // comes back incomplete/unparseable. Defaults to the user-tunable config value
+  // (chatNumCtx); callers can still override for unusually large-document work.
   numCtx?: number
 }): Promise<string> {
   const url = `${OLLAMA_HOST}/api/chat`
@@ -39,7 +39,7 @@ export async function ollamaChat(opts: {
       messages: opts.messages,
       stream: false,
       ...(opts.format ? { format: opts.format } : {}),
-      options: { num_ctx: opts.numCtx ?? 8192 },
+      options: { num_ctx: opts.numCtx ?? getConfig().chatNumCtx },
     }),
   })
 

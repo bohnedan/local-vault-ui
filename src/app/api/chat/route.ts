@@ -60,11 +60,11 @@ export async function POST(req: NextRequest) {
       )
       const messages = buildCurationPrompt(body.question, editChunks, history)
       // Curation is the heaviest prompt we build (_CLAUDE.md + 6 chunks + history +
-      // a long spec) and asks for FULL file contents back as JSON. At the 8192
-      // default, a big _CLAUDE.md or long chat truncates the prompt — dropping the
-      // "return JSON" rule — and leaves no room to finish the reply, so the JSON
-      // comes back unparseable and we 502. Give it a much larger window.
-      const raw = await ollamaChat({ messages, format: 'json', numCtx: 32768 })
+      // a long spec) and asks for FULL file contents back as JSON. If the window is
+      // too small the prompt truncates — dropping the "return JSON" rule — leaving no
+      // room to finish the reply, so the JSON comes back unparseable and we 502. Uses
+      // the config window (chatNumCtx), tunable per machine + model.
+      const raw = await ollamaChat({ messages, format: 'json' })
       const result = parseModelJson<{ changes?: unknown[]; log_entry?: string; summary?: string }>(raw)
       if (!result) {
         return NextResponse.json({

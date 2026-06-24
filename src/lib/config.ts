@@ -12,6 +12,12 @@ export type AppConfig = {
   chatModel: string
   embedModel: string
   visionModel: string
+  // Context window (tokens) for chat/curation requests. Bounded by TWO ceilings:
+  // the model's trained max (asking beyond it degrades output) and the machine's
+  // RAM/VRAM (the KV cache scales with this — too high OOMs or falls back to CPU).
+  // Tune per machine + model. Too LOW silently truncates the prompt — dropping the
+  // "return JSON" rule in edit mode — which surfaces as a 502 unparseable-JSON error.
+  chatNumCtx: number
   // Automatic caretaking. All local, all opt-out-able from Settings.
   caretakeEnabled: boolean   // master switch for the in-app scheduler
   caretakeHour: number       // 0–23, local time, for the nightly full caretake
@@ -24,6 +30,7 @@ function defaults(): AppConfig {
     chatModel: process.env.OLLAMA_CHAT_MODEL ?? 'qwen2.5:3b',
     embedModel: process.env.OLLAMA_EMBED_MODEL ?? 'nomic-embed-text',
     visionModel: process.env.OLLAMA_VISION_MODEL ?? 'llama3.2-vision',
+    chatNumCtx: Number(process.env.OLLAMA_NUM_CTX) || 16384,
     caretakeEnabled: true,
     caretakeHour: 3,
     syncIntervalHours: 6,
