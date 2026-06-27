@@ -111,7 +111,7 @@ async function queueNightlyCuration(): Promise<number> {
 
   const chunks = await retrieve(recent.join(' '), 12)
   const messages = buildCurationPrompt(userText, chunks)
-  const raw = await ollamaChat({ messages, format: 'json' })
+  const raw = await ollamaChat({ messages, format: 'json', role: 'librarian' })
 
   let result: { changes?: unknown[]; log_entry?: string; summary?: string }
   try { result = JSON.parse(raw) } catch { return 0 }

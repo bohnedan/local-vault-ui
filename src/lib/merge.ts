@@ -48,7 +48,8 @@ async function mergeNote(notePath: string, current: string, proposed: string): P
     },
   ]
   // Generous context so a long note + its update both fit without truncation.
-  const raw = await ollamaChat({ messages, numCtx: 16384 })
+  // Rewriting/integrating note prose while preserving voice — writer work.
+  const raw = await ollamaChat({ messages, numCtx: 16384, role: 'writer' })
   return stripFences(raw)
 }
 

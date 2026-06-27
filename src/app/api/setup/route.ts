@@ -27,8 +27,22 @@ export async function POST(req: NextRequest) {
     }
 
     if (body.chatModel !== undefined) patch.chatModel = body.chatModel.trim()
+    if (body.writerModel !== undefined) patch.writerModel = body.writerModel.trim()
+    if (body.librarianModel !== undefined) patch.librarianModel = body.librarianModel.trim()
     if (body.embedModel !== undefined) patch.embedModel = body.embedModel.trim()
     if (body.visionModel !== undefined) patch.visionModel = body.visionModel.trim()
+
+    // Keep the writer/librarian split INHERITING from the chat model until the user
+    // explicitly overrides a role. setConfig persists every resolved field, so once
+    // anything is saved these roles become concrete — without this, a single-model
+    // user who later changes their chat model would leave both roles pinned to the
+    // old one. So: if chat model changes and a role still tracks the old chat model
+    // (and isn't being set in this same request), move it to the new chat model too.
+    if (patch.chatModel !== undefined) {
+      const cur = getConfig()
+      if (body.writerModel === undefined && cur.writerModel === cur.chatModel) patch.writerModel = patch.chatModel
+      if (body.librarianModel === undefined && cur.librarianModel === cur.chatModel) patch.librarianModel = patch.chatModel
+    }
 
     // Automatic-caretaking schedule.
     if (body.caretakeEnabled !== undefined) patch.caretakeEnabled = !!body.caretakeEnabled

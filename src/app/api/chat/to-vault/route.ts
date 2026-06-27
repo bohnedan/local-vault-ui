@@ -23,7 +23,7 @@ export async function POST(req: NextRequest) {
     const retrievalQuery = `${notes ? notes + ' ' : ''}${clipped}`.slice(0, 2000)
     const chunks = await retrieve(retrievalQuery, 6)
     const messages = buildIngestPrompt(filename, clipped, chunks, undefined, notes, tags)
-    const raw = await ollamaChat({ messages, format: 'json' })
+    const raw = await ollamaChat({ messages, format: 'json', role: 'librarian' })
 
     const result = parseModelJson<{ changes?: unknown[]; log_entry?: string; summary?: string }>(raw)
     if (!result) {

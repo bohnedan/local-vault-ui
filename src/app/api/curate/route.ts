@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
 
     const chunks = await retrieve(body.text, 8)
     const messages = buildCurationPrompt(body.text, chunks, [], body.tags)
-    const raw = await ollamaChat({ messages, format: 'json' })
+    const raw = await ollamaChat({ messages, format: 'json', role: 'librarian' })
 
     const result = parseModelJson<CurationResult>(raw)
     if (!result) {

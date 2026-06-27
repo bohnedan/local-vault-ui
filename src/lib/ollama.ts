@@ -27,15 +27,26 @@ export async function ollamaChat(opts: {
   // comes back incomplete/unparseable. Defaults to the user-tunable config value
   // (chatNumCtx); callers can still override for unusually large-document work.
   numCtx?: number
+  // Which side of the writer/librarian split handles this call (see MODEL-SELECTION.md):
+  //   'writer'    — prose (chat answers, note merges)        → writerModel
+  //   'librarian' — structured/JSON work (curation, ingest…) → librarianModel
+  // Both resolve to chatModel unless the user configured a split, so omitting it (or
+  // any legacy caller) just uses chatModel — unchanged behavior.
+  role?: 'writer' | 'librarian'
 }): Promise<string> {
   const url = `${OLLAMA_HOST}/api/chat`
   assertLocalHost(url)
+
+  const cfg = getConfig()
+  const model = opts.role === 'writer' ? cfg.writerModel
+    : opts.role === 'librarian' ? cfg.librarianModel
+    : cfg.chatModel
 
   const res = await fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      model: getConfig().chatModel,
+      model,
       messages: opts.messages,
       stream: false,
       ...(opts.format ? { format: opts.format } : {}),

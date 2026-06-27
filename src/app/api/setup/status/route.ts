@@ -61,11 +61,17 @@ export async function GET() {
       reachable: ollamaReachable,
       installed,
       chatModel: cfg.chatModel,
+      writerModel: cfg.writerModel,
+      librarianModel: cfg.librarianModel,
       embedModel: cfg.embedModel,
       visionModel: cfg.visionModel,
       hasChatModel: ollamaReachable && hasModel(cfg.chatModel),
+      hasWriterModel: ollamaReachable && hasModel(cfg.writerModel),
+      hasLibrarianModel: ollamaReachable && hasModel(cfg.librarianModel),
       hasEmbedModel: ollamaReachable && hasModel(cfg.embedModel),
       hasVisionModel: ollamaReachable && hasModel(cfg.visionModel),
+      // True when the two roles point at the same model as chat (single-model setup).
+      splitActive: cfg.writerModel !== cfg.chatModel || cfg.librarianModel !== cfg.chatModel,
     },
     index: { chunks, built: chunks > 0 },
   })

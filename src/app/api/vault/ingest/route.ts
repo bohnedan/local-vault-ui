@@ -80,7 +80,7 @@ async function ingestSource(
 
     let raw: string
     try {
-      raw = await ollamaChat({ messages, format: 'json', numCtx: INGEST_NUM_CTX })
+      raw = await ollamaChat({ messages, format: 'json', numCtx: INGEST_NUM_CTX, role: 'librarian' })
     } catch (err) {
       // Model/host error (not a parsing issue) — retrying smaller won't help.
       return NextResponse.json({ error: err instanceof Error ? err.message : 'Ingest failed' }, { status: 502 })

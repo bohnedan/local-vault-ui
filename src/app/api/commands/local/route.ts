@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
       : []
 
     const messages = buildCommandPrompt(command, body.input, chunks)
-    const raw = await ollamaChat({ messages, format: 'json' })
+    const raw = await ollamaChat({ messages, format: 'json', role: 'librarian' })
 
     const result = parseModelJson<CommandResult>(raw)
     if (!result) {

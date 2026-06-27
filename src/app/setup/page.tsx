@@ -13,15 +13,16 @@ type Status = {
   vault: { path: string; valid: boolean; noteCount: number }
   ollama: {
     host: string; reachable: boolean; installed: string[]
-    chatModel: string; embedModel: string; visionModel: string
-    hasChatModel: boolean; hasEmbedModel: boolean; hasVisionModel: boolean
+    chatModel: string; writerModel: string; librarianModel: string; embedModel: string; visionModel: string
+    hasChatModel: boolean; hasWriterModel: boolean; hasLibrarianModel: boolean; hasEmbedModel: boolean; hasVisionModel: boolean
+    splitActive: boolean
   }
   index: { chunks: number; built: boolean }
   init: { empty: boolean; hasClaudeMd: boolean; noteCount: number }
   schedule: { caretakeEnabled: boolean; caretakeHour: number; syncIntervalHours: number }
 }
 
-type Role = 'chatModel' | 'embedModel' | 'visionModel'
+type Role = 'chatModel' | 'writerModel' | 'librarianModel' | 'embedModel' | 'visionModel'
 
 // Heuristics to recognize a model's role from its name, so we can auto-pick a
 // working model from whatever the user already has installed.
@@ -45,10 +46,23 @@ const SUGGESTIONS: Record<Role, { name: string; note: string }[]> = {
     { name: 'qwen2.5:3b', note: 'fast, text-only' },
     { name: 'llama3.2:3b', note: 'balanced, text-only' },
   ],
+  // Writer = prose (chat answers, note merges). Gemma-class models write cleaner prose.
+  writerModel: [
+    { name: 'gemma4:12b', note: 'best prose, ~9GB' },
+    { name: 'gemma4:4b', note: 'lighter prose' },
+    { name: 'llama3.2:3b', note: 'balanced, light' },
+  ],
+  // Librarian = structure/OCR (curation, ingest, taxonomy). Qwen-VL excels at extraction.
+  librarianModel: [
+    { name: 'qwen3-vl:8b', note: 'strong OCR + structure' },
+    { name: 'qwen3.5:4b', note: 'multimodal, 8GB' },
+    { name: 'qwen2.5:3b', note: 'fast, text-only' },
+  ],
   embedModel: [
-    { name: 'nomic-embed-text', note: 'recommended' },
-    { name: 'mxbai-embed-large', note: 'higher quality' },
-    { name: 'all-minilm', note: 'tiny' },
+    { name: 'qwen3-embedding:8b', note: 'top quality, ~7GB' },
+    { name: 'qwen3-embedding:0.6b', note: 'great + light' },
+    { name: 'embeddinggemma', note: 'tiny, strong' },
+    { name: 'nomic-embed-text', note: 'classic default' },
   ],
   visionModel: [
     { name: 'qwen3.5:4b', note: 'best small OCR, 8GB' },
@@ -72,6 +86,8 @@ export default function SetupPage() {
   const [buildError, setBuildError] = useState<string | null>(null)
   const [initializing, setInitializing] = useState(false)
   const [initMsg, setInitMsg] = useState<string | null>(null)
+  // Whether the optional two-model (writer/librarian) split section is expanded.
+  const [splitOpen, setSplitOpen] = useState(false)
 
   const refresh = useCallback(async () => {
     const res = await fetch('/api/setup/status')
@@ -86,6 +102,14 @@ export default function SetupPage() {
   // Once, on first load: if a role's configured model isn't installed but a
   // suitable installed model exists, switch to it so the app works out of the box
   // with whatever the user already has.
+  // Open the split section automatically if the user already has a split configured.
+  const splitSynced = useRef(false)
+  useEffect(() => {
+    if (!status || splitSynced.current) return
+    splitSynced.current = true
+    if (status.ollama.splitActive) setSplitOpen(true)
+  }, [status])
+
   const autoPicked = useRef(false)
   useEffect(() => {
     if (!status?.ollama.reachable || autoPicked.current) return
@@ -189,12 +213,24 @@ export default function SetupPage() {
     await refresh()
   }
 
-  // Pick any model for a role (chat/embed/vision); persists immediately.
+  // Pick any model for a role (chat/writer/librarian/embed/vision); persists immediately.
   async function saveModel(role: Role, model: string) {
     await fetch('/api/setup', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ [role]: model }),
+    })
+    await refresh()
+  }
+
+  // Collapse the split and re-inherit both roles from the chat model (single-model setup).
+  async function disableSplit() {
+    setSplitOpen(false)
+    if (!status) return
+    await fetch('/api/setup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ writerModel: status.ollama.chatModel, librarianModel: status.ollama.chatModel }),
     })
     await refresh()
   }
@@ -304,6 +340,34 @@ export default function SetupPage() {
             <ModelPicker role="visionModel" label="Vision model" optional current={s.ollama.visionModel} ok={s.ollama.hasVisionModel}
               installed={s.ollama.installed} active={pullingRole === 'visionModel'} pulling={pulling} pullMsg={pullMsg} pullPct={pullPct}
               onSelect={(m) => void saveModel('visionModel', m)} onPull={(m) => pullModel(m, 'visionModel')} />
+
+            {/* Optional: two-model split (writer vs librarian). See MODEL-SELECTION.md. */}
+            <div className="rounded-lg px-3 py-2.5 flex flex-col gap-2" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)' }}>
+              <label className="flex items-center gap-2 text-xs cursor-pointer" style={{ color: 'var(--text)' }}>
+                <input
+                  type="checkbox"
+                  checked={splitOpen}
+                  onChange={e => { if (e.target.checked) setSplitOpen(true); else void disableSplit() }}
+                />
+                <span className="font-medium">Split work across two models</span>
+                <span style={{ color: 'var(--text-subtle)' }}>· advanced, needs more RAM</span>
+              </label>
+              <p className="text-xs" style={{ color: 'var(--text-subtle)' }}>
+                Use a <strong>writer</strong> model for prose (chat answers, note merges) and a
+                {' '}<strong>librarian</strong> model for structure (curation, ingest, OCR, taxonomy). Leave off
+                to use the chat model for both. On 8–16&nbsp;GB, prefer a single model; the split shines at 48&nbsp;GB+.
+              </p>
+              {splitOpen && (
+                <div className="flex flex-col gap-4 mt-1">
+                  <ModelPicker role="writerModel" label="Writer model" current={s.ollama.writerModel} ok={s.ollama.hasWriterModel}
+                    installed={s.ollama.installed} active={pullingRole === 'writerModel'} pulling={pulling} pullMsg={pullMsg} pullPct={pullPct}
+                    onSelect={(m) => void saveModel('writerModel', m)} onPull={(m) => pullModel(m, 'writerModel')} />
+                  <ModelPicker role="librarianModel" label="Librarian model" current={s.ollama.librarianModel} ok={s.ollama.hasLibrarianModel}
+                    installed={s.ollama.installed} active={pullingRole === 'librarianModel'} pulling={pulling} pullMsg={pullMsg} pullPct={pullPct}
+                    onSelect={(m) => void saveModel('librarianModel', m)} onPull={(m) => pullModel(m, 'librarianModel')} />
+                </div>
+              )}
+            </div>
           </div>
         )}
       </StepCard>

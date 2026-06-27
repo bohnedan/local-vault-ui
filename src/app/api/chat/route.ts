@@ -64,7 +64,8 @@ export async function POST(req: NextRequest) {
       // too small the prompt truncates — dropping the "return JSON" rule — leaving no
       // room to finish the reply, so the JSON comes back unparseable and we 502. Uses
       // the config window (chatNumCtx), tunable per machine + model.
-      const raw = await ollamaChat({ messages, format: 'json' })
+      // Edit mode produces a structured change-proposal — librarian work.
+      const raw = await ollamaChat({ messages, format: 'json', role: 'librarian' })
       const result = parseModelJson<{ changes?: unknown[]; log_entry?: string; summary?: string }>(raw)
       if (!result) {
         return NextResponse.json({
@@ -95,7 +96,8 @@ export async function POST(req: NextRequest) {
       new Map(chunks.map(c => [c.notePath, { path: c.notePath, heading: c.heading }])).values()
     )
     const messages = buildRagPrompt(body.question, chunks, history)
-    const answer = await ollamaChat({ messages })
+    // A grounded prose answer for the user to read — writer work.
+    const answer = await ollamaChat({ messages, role: 'writer' })
 
     // Persist the exchange to this session (created if new).
     const sid = appendToSession(body.sessionId, [
