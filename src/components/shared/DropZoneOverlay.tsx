@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { Upload, Loader2, Sparkles, X } from 'lucide-react'
 import { useToast } from './Toast'
 import { ProposalReview, type ProposalResponse } from './ProposalReview'
+import { TagPicker } from './TagPicker'
 
 // All of these now go through /api/vault/ingest (text/pdf → note; image → vision → note).
 const INGEST_EXTS = ['.md', '.markdown', '.txt', '.text', '.pdf', '.png', '.jpg', '.jpeg', '.webp', '.gif']
@@ -25,6 +26,8 @@ export function DropZoneOverlay() {
   const [result, setResult] = useState<ProposalResponse | null>(null)
   // Optional notes the user attaches to the current file; sent with high priority.
   const [notes, setNotes] = useState('')
+  // Optional tags stamped onto the resulting note (code-enforced server-side).
+  const [tags, setTags] = useState<string[]>([])
 
   const rawSave = useCallback(async (file: File) => {
     try {
@@ -62,16 +65,18 @@ export function DropZoneOverlay() {
     setQueue(rest)
     setCurrent(next)
     setNotes('')
+    setTags([])
     setPhase('compose')
   }, [queue, current, phase])
 
-  // Send the current file (plus any attached notes) to the local ingest pipeline.
-  const processCurrent = useCallback(async (file: File, attachedNotes: string) => {
+  // Send the current file (plus any attached notes/tags) to the local ingest pipeline.
+  const processCurrent = useCallback(async (file: File, attachedNotes: string, attachedTags: string[]) => {
     setPhase('ingesting')
     try {
       const fd = new FormData()
       fd.append('file', file)
       if (attachedNotes.trim()) fd.append('notes', attachedNotes.trim())
+      if (attachedTags.length) fd.append('tags', JSON.stringify(attachedTags))
       const res = await fetch('/api/vault/ingest', { method: 'POST', body: fd })
       if (res.status === 415) {
         // Can't extract text — fall back to saving the raw file.
@@ -97,7 +102,7 @@ export function DropZoneOverlay() {
   }, [rawSave, showToast])
 
   function finish() {
-    setResult(null); setCurrent(null); setNotes(''); setPhase('idle')
+    setResult(null); setCurrent(null); setNotes(''); setTags([]); setPhase('idle')
   }
 
   // Drag listeners
@@ -166,7 +171,7 @@ export function DropZoneOverlay() {
                   autoFocus
                   value={notes}
                   onChange={e => setNotes(e.target.value)}
-                  onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') void processCurrent(current, notes) }}
+                  onKeyDown={e => { if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') void processCurrent(current, notes, tags) }}
                   placeholder="e.g. This is the signed audit contract for Example Company — flag the deadline (Aug 15) and link it to [[Example Company]]."
                   className="resize-none rounded-lg p-3 text-sm outline-none"
                   style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', color: 'var(--text)', minHeight: '120px', fontFamily: 'inherit' }}
@@ -175,16 +180,22 @@ export function DropZoneOverlay() {
                   Your notes take precedence over the extracted/OCR&apos;d text and are folded into the
                   note&apos;s &ldquo;For future Claude&rdquo; summary.
                 </p>
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs font-medium" style={{ color: 'var(--text-muted)' }}>
+                    Tags <span style={{ color: 'var(--text-subtle)' }}>(optional — added to the note&apos;s frontmatter)</span>
+                  </label>
+                  <TagPicker value={tags} onChange={setTags} />
+                </div>
                 <div className="flex justify-end gap-2">
                   <button
-                    onClick={() => void processCurrent(current, '')}
+                    onClick={() => void processCurrent(current, '', tags)}
                     className="px-4 py-2.5 rounded-xl text-sm font-medium transition-all hover:scale-[1.02]"
                     style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', color: 'var(--text-muted)' }}
                   >
                     Skip notes
                   </button>
                   <button
-                    onClick={() => void processCurrent(current, notes)}
+                    onClick={() => void processCurrent(current, notes, tags)}
                     className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all hover:scale-[1.02]"
                     style={{ background: 'linear-gradient(135deg, var(--primary), var(--accent))', color: 'white' }}
                   >

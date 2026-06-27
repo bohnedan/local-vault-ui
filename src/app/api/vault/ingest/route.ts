@@ -7,6 +7,7 @@ import { ollamaChat, ollamaVisionChat } from '@/lib/ollama'
 import { getVaultPath } from '@/lib/vault'
 import { getConfig } from '@/lib/config'
 import { normalizeChanges } from '@/lib/healthFix'
+import { applyTags } from '@/lib/tags'
 import { reconcileUpdates } from '@/lib/merge'
 import { parseModelJson } from '@/lib/modelJson'
 
@@ -66,6 +67,7 @@ async function ingestSource(
   fullSourceText: string,
   assetPath: string | undefined,
   userNotes: string | undefined,
+  tags: string[],
 ): Promise<NextResponse | IngestResult> {
   const retrievalQuery = `${userNotes ? userNotes + ' ' : ''}${fullSourceText}`.slice(0, 2000)
   const chunks = await retrieve(retrievalQuery, 6)
@@ -74,7 +76,7 @@ async function ingestSource(
     // Skip redundant smaller passes when the source is already short.
     if (limit !== MAX_CHARS && limit >= fullSourceText.length) continue
     const clipped = fullSourceText.slice(0, limit)
-    const messages = buildIngestPrompt(filename, clipped, chunks, assetPath, userNotes)
+    const messages = buildIngestPrompt(filename, clipped, chunks, assetPath, userNotes, tags)
 
     let raw: string
     try {
@@ -86,7 +88,8 @@ async function ingestSource(
 
     const result = parseModelJson<IngestResult>(raw)
     if (result && Array.isArray(result.changes) && result.changes.length > 0) {
-      result.changes = normalizeChanges(await reconcileUpdates(result.changes))
+      // Guarantee the user's chosen tags land on the note (code-enforced).
+      result.changes = applyTags(normalizeChanges(await reconcileUpdates(result.changes)), tags)
       return { ...result, origin: 'drop' }
     }
     // else: shrink the source and try again
@@ -119,6 +122,13 @@ export async function POST(req: NextRequest) {
     const notesField = form.get('notes')
     const userNotes = typeof notesField === 'string' ? notesField : undefined
 
+    // Optional tags to stamp onto the resulting note (sent as a JSON array string).
+    const tagsField = form.get('tags')
+    let tags: string[] = []
+    if (typeof tagsField === 'string' && tagsField.trim()) {
+      try { const parsed = JSON.parse(tagsField); if (Array.isArray(parsed)) tags = parsed.map(String) } catch { /* ignore malformed */ }
+    }
+
     // --- Image branch: save to Assets, then have a vision-capable model describe it ---
     if (IMAGE_EXTS.has(ext)) {
       const assetPath = saveImage(filename, buffer)
@@ -150,7 +160,7 @@ export async function POST(req: NextRequest) {
       }
 
       const sourceText = `Image file saved at ${assetPath}.\n\nVisual description and transcribed text:\n${description}`
-      const out = await ingestSource(filename, sourceText, assetPath, userNotes)
+      const out = await ingestSource(filename, sourceText, assetPath, userNotes, tags)
       return out instanceof NextResponse ? out : NextResponse.json(out)
     }
 
@@ -163,7 +173,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Document appears to be empty' }, { status: 400 })
     }
 
-    const out = await ingestSource(filename, text, undefined, userNotes)
+    const out = await ingestSource(filename, text, undefined, userNotes, tags)
     return out instanceof NextResponse ? out : NextResponse.json(out)
   } catch (err) {
     return NextResponse.json(
